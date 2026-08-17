@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: RideFlow ride-sharing platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Current user profile operations
+  - name: rides
+    description: Passenger and driver ride operations
+  - name: drivers
+    description: Driver availability and matching operations
+  - name: admin
+    description: Admin overview and moderation operations
 paths:
   /healthz:
     get:
@@ -24,13 +32,452 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the signed-in user's profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createCurrentUserProfile
+      tags: [auth]
+      summary: Create or update the signed-in user's local profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /rides:
+    get:
+      operationId: listRides
+      tags: [rides]
+      summary: List rides visible to the current role
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [REQUESTED, SEARCHING, DRIVER_ASSIGNED, DRIVER_ARRIVING, IN_PROGRESS, COMPLETED, CANCELLED, REJECTED]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Ride list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ride"
+    post:
+      operationId: requestRide
+      tags: [rides]
+      summary: Request a ride as a passenger
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RideInput"
+      responses:
+        "201":
+          description: Created ride
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ride"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /rides/{id}:
+    get:
+      operationId: getRide
+      tags: [rides]
+      summary: Get a ride by id
+      parameters:
+        - $ref: "#/components/parameters/RideId"
+      responses:
+        "200":
+          description: Ride details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ride"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /rides/{id}/cancel:
+    post:
+      operationId: cancelRide
+      tags: [rides]
+      summary: Cancel a ride
+      parameters:
+        - $ref: "#/components/parameters/RideId"
+      responses:
+        "200":
+          description: Cancelled ride
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ride"
+  /rides/{id}/accept:
+    post:
+      operationId: acceptRide
+      tags: [rides]
+      summary: Accept a ride as a matched driver
+      parameters:
+        - $ref: "#/components/parameters/RideId"
+      responses:
+        "200":
+          description: Accepted ride
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ride"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /rides/{id}/reject:
+    post:
+      operationId: rejectRide
+      tags: [rides]
+      summary: Reject a ride as a driver
+      parameters:
+        - $ref: "#/components/parameters/RideId"
+      responses:
+        "200":
+          description: Rejected ride
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ride"
+  /rides/{id}/status:
+    patch:
+      operationId: updateRideStatus
+      tags: [rides]
+      summary: Advance a ride through its lifecycle
+      parameters:
+        - $ref: "#/components/parameters/RideId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RideStatusInput"
+      responses:
+        "200":
+          description: Updated ride
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ride"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /drivers/me:
+    get:
+      operationId: getDriverProfile
+      tags: [drivers]
+      summary: Get the current driver's profile
+      responses:
+        "200":
+          description: Driver profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DriverProfile"
+  /drivers/availability:
+    patch:
+      operationId: updateDriverAvailability
+      tags: [drivers]
+      summary: Update driver availability and current location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DriverAvailabilityInput"
+      responses:
+        "200":
+          description: Updated driver profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DriverProfile"
+  /drivers/nearby:
+    get:
+      operationId: listNearbyDrivers
+      tags: [drivers]
+      summary: Find available drivers near a pickup location
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+      responses:
+        "200":
+          description: Nearby drivers sorted by distance
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NearbyDriver"
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Get platform summary metrics
+      responses:
+        "200":
+          description: Admin overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+  /admin/rides:
+    get:
+      operationId: listAdminRides
+      tags: [admin]
+      summary: List recent rides for operations
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Recent rides
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ride"
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List platform users for administration
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [PASSENGER, DRIVER, ADMIN]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Platform users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
 components:
+  parameters:
+    RideId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Resource state conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
-
+      required: [status]
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [PASSENGER, DRIVER, ADMIN]
+        phone: { type: ["string", "null"] }
+        rating: { type: number, format: double }
+        totalRides: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required: [id, name, email, role, rating, totalRides, createdAt]
+    ProfileInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 2 }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [PASSENGER, DRIVER, ADMIN]
+        phone: { type: string }
+        vehicleMake: { type: string }
+        vehicleModel: { type: string }
+        vehicleColor: { type: string }
+        vehiclePlate: { type: string }
+      required: [name, email, role]
+    DriverProfile:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        vehicleMake: { type: string }
+        vehicleModel: { type: string }
+        vehicleColor: { type: string }
+        vehiclePlate: { type: string }
+        isAvailable: { type: boolean }
+        currentLat: { type: ["number", "null"], format: double }
+        currentLng: { type: ["number", "null"], format: double }
+        rating: { type: number, format: double }
+        totalTrips: { type: integer }
+      required: [id, userId, vehicleMake, vehicleModel, vehicleColor, vehiclePlate, isAvailable, rating, totalTrips]
+    Ride:
+      type: object
+      properties:
+        id: { type: string }
+        passengerId: { type: string }
+        passengerName: { type: string }
+        driverId: { type: ["string", "null"] }
+        driverName: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [REQUESTED, SEARCHING, DRIVER_ASSIGNED, DRIVER_ARRIVING, IN_PROGRESS, COMPLETED, CANCELLED, REJECTED]
+        pickup: { type: string }
+        dropoff: { type: string }
+        pickupLat: { type: number, format: double }
+        pickupLng: { type: number, format: double }
+        dropoffLat: { type: number, format: double }
+        dropoffLng: { type: number, format: double }
+        distanceKm: { type: number, format: double }
+        durationMinutes: { type: integer }
+        estimatedFare: { type: number, format: double }
+        finalFare: { type: ["number", "null"], format: double }
+        requestedAt: { type: string, format: date-time }
+        acceptedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+      required: [id, passengerId, passengerName, driverId, driverName, status, pickup, dropoff, pickupLat, pickupLng, dropoffLat, dropoffLng, distanceKm, durationMinutes, estimatedFare, finalFare, requestedAt, acceptedAt, completedAt]
+    RideInput:
+      type: object
+      properties:
+        pickup: { type: string, minLength: 2 }
+        dropoff: { type: string, minLength: 2 }
+        pickupLat: { type: number, format: double }
+        pickupLng: { type: number, format: double }
+        dropoffLat: { type: number, format: double }
+        dropoffLng: { type: number, format: double }
+      required: [pickup, dropoff, pickupLat, pickupLng, dropoffLat, dropoffLng]
+    RideStatusInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [DRIVER_ARRIVING, IN_PROGRESS, COMPLETED, CANCELLED]
+        finalFare: { type: number, format: double }
+      required: [status]
+    DriverAvailabilityInput:
+      type: object
+      properties:
+        isAvailable: { type: boolean }
+        currentLat: { type: number, format: double }
+        currentLng: { type: number, format: double }
+      required: [isAvailable]
+    NearbyDriver:
+      type: object
+      properties:
+        driver: { $ref: "#/components/schemas/DriverProfile" }
+        name: { type: string }
+        distanceKm: { type: number, format: double }
+        etaMinutes: { type: integer }
+      required: [driver, name, distanceKm, etaMinutes]
+    AdminOverview:
+      type: object
+      properties:
+        totalUsers: { type: integer }
+        totalPassengers: { type: integer }
+        totalDrivers: { type: integer }
+        activeDrivers: { type: integer }
+        ridesToday: { type: integer }
+        completedRides: { type: integer }
+        revenueToday: { type: number, format: double }
+        averageRating: { type: number, format: double }
+        rideStatusCounts:
+          type: object
+          additionalProperties:
+            type: integer
+      required: [totalUsers, totalPassengers, totalDrivers, activeDrivers, ridesToday, completedRides, revenueToday, averageRating, rideStatusCounts]

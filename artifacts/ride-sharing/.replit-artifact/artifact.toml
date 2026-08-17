@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "RideFlow"
+description = "A full-stack ride-sharing platform for college communities with passenger trip requests, driver matching, live ride status, fares, history, and admin operations."
+version = "1.0.0"
+id = "artifacts/ride-sharing"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24578
+
+[services.development]
+run = "pnpm --filter @workspace/ride-sharing run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ride-sharing", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ride-sharing/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24578"
+BASE_PATH = "/"
